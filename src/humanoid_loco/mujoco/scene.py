@@ -28,6 +28,7 @@ def build_model(
 ) -> mujoco.MjModel:
     spec = mujoco.MjSpec.from_file(str(Path(menagerie_dir) / "scene.xml"))
     spec.option.timestep = timestep
+    spec.visual.global_.offwidth, spec.visual.global_.offheight = 1920, 1080  # offscreen video
 
     for act in list(spec.actuators):
         spec.delete(act)
