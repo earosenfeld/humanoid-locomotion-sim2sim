@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +32,9 @@ class Schedule:
     @property
     def duration(self) -> float:
         return sum(s.duration for s in self.segments)
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "segments": [asdict(s) for s in self.segments]}
 
     def at(self, t: float) -> Segment:
         for seg in self.segments:
@@ -72,6 +75,11 @@ class Trajectory:
 
     def arrays(self) -> dict[str, np.ndarray]:
         return {f.name: np.asarray(getattr(self, f.name)) for f in fields(self) if f.name != "fell"}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Trajectory:
+        """Inverse of the JSON the C++ loop writes (same keys as the fields here)."""
+        return cls(**{f.name: d[f.name] for f in fields(cls)})
 
 
 def rollout(

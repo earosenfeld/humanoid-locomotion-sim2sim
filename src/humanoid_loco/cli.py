@@ -46,8 +46,25 @@ def main(argv: list[str] | None = None) -> None:
     sw.add_argument("--menagerie", type=Path, default=MENAGERIE)
     sw.add_argument("--out", type=Path)
 
+    pc = sub.add_parser("prepare-cpp", help="write scene.mjb + schedule json for cpp/hls_loop")
+    pc.add_argument("--run", type=Path, required=True)
+    pc.add_argument("--commands", type=Path, default=Path("configs/commands/walk.yaml"))
+    pc.add_argument("--menagerie", type=Path, default=MENAGERIE)
+    pc.add_argument("--control-dt", type=float, default=0.001)
+
+    rc = sub.add_parser("score", help="score a trajectory json (e.g. from cpp/hls_loop)")
+    rc.add_argument("--run", type=Path, required=True)
+    rc.add_argument("trajectory", type=Path)
+
     a = p.parse_args(argv)
-    {"train": _train, "play": _play, "sim2sim": _sim2sim, "sweep": _sweep}[a.cmd](a)
+    {
+        "train": _train,
+        "play": _play,
+        "sim2sim": _sim2sim,
+        "sweep": _sweep,
+        "prepare-cpp": _prepare_cpp,
+        "score": _score,
+    }[a.cmd](a)
 
 
 def _train(a) -> None:
@@ -110,3 +127,32 @@ def _sweep(a) -> None:
     out = a.out or a.run / f"sweep-{schedule.name}.json"
     write_report(out, schedule=schedule.name, grid=rows, source=manifest.source)
     print(markdown_table(rows, ["mass_scale", "friction_scale", "fall_rate", "vx_rmse"]))
+
+
+def _prepare_cpp(a) -> None:
+    import json
+
+    import mujoco
+
+    from humanoid_loco.manifest import PolicyManifest
+    from humanoid_loco.mujoco.rollout import Schedule
+    from humanoid_loco.mujoco.scene import build_model
+
+    manifest = PolicyManifest.load(a.run / "policy.json")
+    mujoco.mj_saveModel(build_model(manifest, a.menagerie, a.control_dt), str(a.run / "scene.mjb"))
+    schedule = Schedule.from_yaml(a.commands)
+    out = a.run / f"schedule-{schedule.name}.json"
+    out.write_text(json.dumps(schedule.to_dict()) + "\n")
+    print(f"wrote {a.run / 'scene.mjb'} and {out}")
+
+
+def _score(a) -> None:
+    import json
+
+    from humanoid_loco.manifest import PolicyManifest
+    from humanoid_loco.mujoco.metrics import evaluate
+    from humanoid_loco.mujoco.rollout import Trajectory
+
+    manifest = PolicyManifest.load(a.run / "policy.json")
+    traj = Trajectory.from_dict(json.loads(a.trajectory.read_text()))
+    print(json.dumps(evaluate(traj, manifest), indent=2))
