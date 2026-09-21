@@ -1,0 +1,10 @@
+# Velocity-command schedule for sim-to-sim evaluation. Commands are [vx, vy, yaw_rate]
+# in the base frame, matching Isaac Lab's velocity_commands observation.
+name: walk
+segments:
+  - {duration: 2.0, command: [0.0, 0.0, 0.0]}
+  - {duration: 5.0, command: [0.5, 0.0, 0.0]}
+  - {duration: 5.0, command: [1.0, 0.0, 0.0]}
+  - {duration: 4.0, command: [0.0, 0.5, 0.0]}
+  - {duration: 4.0, command: [0.5, 0.0, 0.8]}
+  - {duration: 3.0, command: [0.0, 0.0, 0.0]}

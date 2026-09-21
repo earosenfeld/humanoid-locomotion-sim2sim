@@ -1,0 +1,28 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch MuJoCo Menagerie G1 (sparse)
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/google-deepmind/mujoco_menagerie.git third_party/mujoco_menagerie
+          git -C third_party/mujoco_menagerie sparse-checkout set unitree_g1
+      - run: python -m pip install -e ".[mujoco,dev]"
+      - run: ruff check . && ruff format --check .
+      - run: pytest -q
+      - name: Sim-to-sim smoke with a synthetic policy
+        run: |
+          python -c "import sys; sys.path.insert(0,'tests'); from synthetic import *; m=g1_manifest(); write_synthetic_policy('/tmp/run/policy.onnx', m) if __import__('os').makedirs('/tmp/run', exist_ok=True) is None else None; m.save('/tmp/run/policy.json')"
+          hls sim2sim --run /tmp/run --seeds 2 --out /tmp/run/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim2sim-smoke
+          path: /tmp/run/report.json
