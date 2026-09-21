@@ -66,6 +66,8 @@ def build_manifest(env, source: dict) -> PolicyManifest:
         action_clip=getattr(env.cfg, "clip_actions", None),
         saturation_effort=gains["saturation_effort"][ids].tolist() if dc else None,
         velocity_limit=gains["velocity_limit"][ids].tolist() if dc else None,
+        armature=gains["armature"][ids].tolist(),
+        joint_friction=gains["joint_friction"][ids].tolist(),
         source=source,
     )
 
@@ -90,6 +92,8 @@ _PARAMS = {  # manifest field -> isaaclab.actuators.ActuatorBase attribute
     "effort_limit": "effort_limit",
     "velocity_limit": "velocity_limit",
     "saturation_effort": "saturation_effort",
+    "armature": "armature",
+    "joint_friction": "friction",
 }
 
 

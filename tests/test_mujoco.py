@@ -15,6 +15,9 @@ def test_scene_actuators_cover_manifest_exactly(manifest, menagerie):
     assert set(names[12:]) == set(manifest.held_joints)
     assert m.opt.timestep == 0.001
     np.testing.assert_allclose(m.actuator_ctrlrange[:12, 1], manifest.torque_limit)
+    dofs = [m.jnt_dofadr[m.joint(n).id] for n in manifest.joint_names]
+    np.testing.assert_allclose(m.dof_armature[dofs], manifest.armature)  # Menagerie ships 0.01
+    np.testing.assert_allclose(m.dof_frictionloss[dofs], manifest.joint_friction)
 
 
 def test_reset_puts_feet_on_floor_and_imu_upright(env):
@@ -64,11 +67,16 @@ def test_rollout_records_trajectory_and_detects_fall(env, manifest, run_dir):
     assert np.isfinite(a["joint_pos"]).all()
 
 
-def test_perturbation_scales_plant(env):
+def test_perturbation_is_idempotent(env):
     m0 = env.model.body_mass[env.pelvis]
-    Perturbation(mass_scale=1.5, friction_scale=0.5, kp_scale=2.0).apply(env)
+    f0 = env.model.geom_friction[:, 0].copy()
+    for _ in range(3):  # repeated application must not compound
+        Perturbation(mass_scale=1.5, friction_scale=0.5, kp_scale=2.0).apply(env)
     assert env.model.body_mass[env.pelvis] == pytest.approx(1.5 * m0)
+    np.testing.assert_allclose(env.model.geom_friction[:, 0], 0.5 * f0)
     assert env.kp[0] == pytest.approx(2.0 * env.manifest.kp[0])
+    Perturbation().apply(env)
+    assert env.model.body_mass[env.pelvis] == pytest.approx(m0)
 
 
 def test_metrics_on_perfect_tracking(manifest):

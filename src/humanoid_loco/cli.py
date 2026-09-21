@@ -45,6 +45,7 @@ def main(argv: list[str] | None = None) -> None:
     sw.add_argument("--friction", type=float, nargs="+", default=[0.4, 0.7, 1.0])
     sw.add_argument("--delay", type=int, nargs="+", default=[0], help="action delay [policy steps]")
     sw.add_argument("--gyro-noise", type=float, nargs="+", default=[0.0])
+    sw.add_argument("--push", type=float, nargs="+", default=[1.0], help="push force scale")
     sw.add_argument("--menagerie", type=Path, default=MENAGERIE)
     sw.add_argument("--out", type=Path)
 
@@ -134,6 +135,8 @@ def _sweep(a) -> None:
         axes["action_delay"] = a.delay
     if a.gyro_noise != [0.0]:
         axes["gyro_noise"] = a.gyro_noise
+    if a.push != [1.0]:
+        axes["push_scale"] = a.push
     rows = sweep(make_env, policy, schedule, range(a.seeds), **axes)
     out = a.out or a.run / f"sweep-{schedule.name}.json"
     write_report(out, schedule=schedule.name, grid=rows, source=manifest.source)

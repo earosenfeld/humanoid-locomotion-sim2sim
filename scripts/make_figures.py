@@ -8,6 +8,7 @@ Outputs into ``assets/``:
     velocity_tracking.png   commanded vs achieved base velocity in MuJoCo (walk schedule)
     gait_cycle.png          leg joint trajectories over two seconds of 1 m/s walking
     robustness_sweep.png    fall rate over pelvis-mass x floor-friction (from sweep json)
+    push_recovery.png       fall rate vs push impulse on the pelvis (from sweep-push json)
     reward_curve.png        PPO mean reward vs iteration (from the TensorBoard run dir)
 """
 
@@ -103,25 +104,41 @@ def figure_robustness_sweep(sweep_json: Path, out: Path) -> Path:
     return out
 
 
+def figure_push_recovery(sweep_json: Path, out: Path) -> Path:
+    rep = json.loads(sweep_json.read_text())
+    rows = sorted(rep["grid"], key=lambda r: r["push_scale"])
+    push = Schedule.from_yaml("configs/commands/push.yaml")
+    force = max(np.linalg.norm(s.push) for s in push.segments if s.push)
+    dur = next(s.duration for s in push.segments if s.push)
+    impulse = [r["push_scale"] * force * dur for r in rows]
+    fig, ax = plt.subplots(figsize=(6.5, 4))
+    ax.plot(impulse, [100 * r["fall_rate"] for r in rows], marker="o", color=PALETTE[1])
+    ax.set_xlabel(f"push impulse on pelvis [N s]  ({dur:g} s pulse while walking at 0.5 m/s)")
+    ax.set_ylabel("fall rate [%]")
+    ax.set_ylim(-5, 105)
+    ax.set_title("Push recovery limit (MuJoCo)")
+    fig.savefig(out)
+    return out
+
+
 def figure_reward_curve(tb_dir: Path, out: Path) -> Path:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
     acc = EventAccumulator(str(tb_dir), size_guidance={"scalars": 0})
     acc.Reload()
     fig, ax = plt.subplots(figsize=(7, 4))
-    for tag, color in (
-        ("Train/mean_reward", PALETTE[0]),
-        ("Train/mean_episode_length", PALETTE[2]),
+    ax2 = ax.twinx()
+    ax2.grid(False)
+    for tag, axis, color in (
+        ("Train/mean_reward", ax, PALETTE[0]),
+        ("Train/mean_episode_length", ax2, PALETTE[2]),
     ):
-        if tag not in acc.Tags()["scalars"]:
-            continue
-        ev = acc.Scalars(tag)
-        (ax if "reward" in tag else ax.twinx()).plot(
-            [e.step for e in ev], [e.value for e in ev], color=color, label=tag.split("/")[1]
-        )
-    ax.set_xlabel("PPO iteration"), ax.set_ylabel("mean reward")
-    ax.set_title("Isaac Lab training, 2048 envs")
-    fig.legend(loc="lower right")
+        if tag in acc.Tags()["scalars"]:
+            ev = acc.Scalars(tag)
+            axis.plot([e.step for e in ev], [e.value for e in ev], color=color)
+            axis.set_ylabel(tag.split("/")[1].replace("_", " "), color=color)
+    ax.set_xlabel("PPO iteration")
+    ax.set_title("Isaac Lab PPO, 2048 envs (episode cap 1000 steps)")
     fig.savefig(out)
     return out
 
@@ -145,6 +162,9 @@ def main() -> None:
     sweep = a.run / "sweep-walk.json"
     if sweep.exists():
         print(figure_robustness_sweep(sweep, ASSETS / "robustness_sweep.png"))
+    push = a.run / "sweep-push.json"
+    if push.exists():
+        print(figure_push_recovery(push, ASSETS / "push_recovery.png"))
     if a.tb:
         print(figure_reward_curve(a.tb, ASSETS / "reward_curve.png"))
 

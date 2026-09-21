@@ -55,11 +55,17 @@ class Perturbation:
     action_delay: int = 0  # policy steps of transport delay between inference and PD target
     gyro_noise: float = 0.0  # rad/s, white noise on the IMU rate
     joint_vel_noise: float = 0.0  # rad/s, white noise on encoder-differenced velocity
+    push_scale: float = 1.0  # multiplies every push in the schedule (push-recovery limit sweeps)
 
     def apply(self, env: MujocoG1) -> None:
+        """Set the plant from its nominal parameters (idempotent across rollouts)."""
+        nom = env.nominal
+        env.model.body_mass[:] = nom["body_mass"]
         env.model.body_mass[env.pelvis] *= self.mass_scale
-        env.model.geom_friction[env.model.geom("floor").id, 0] *= self.friction_scale
-        env.kp = env.kp * self.kp_scale
+        # MuJoCo combines the two geoms' friction with max(), so scale every geom, not the floor
+        env.model.geom_friction[:] = nom["geom_friction"]
+        env.model.geom_friction[:, 0] *= self.friction_scale
+        env.kp = nom["kp"] * self.kp_scale
 
     def corrupt(self, state, rng: np.random.Generator):
         if self.gyro_noise:
@@ -108,8 +114,9 @@ def rollout(
 ) -> Trajectory:
     rng = np.random.default_rng(seed)
     state = env.reset()
-    if perturbation:
-        perturbation.apply(env)
+    (perturbation or Perturbation()).apply(
+        env
+    )  # always: restores nominals after a prior sweep cell
     env.data.qpos[env._qadr] += rng.uniform(-init_noise, init_noise, env.manifest.num_actions)
     env.reset_from_data()
     policy.reset()
@@ -122,7 +129,7 @@ def rollout(
     for k in range(steps):
         seg = schedule.at(env.time)
         command = np.asarray(seg.command, np.float32)
-        env.push(np.asarray(seg.push or (0.0, 0.0, 0.0)))
+        env.push(pert.push_scale * np.asarray(seg.push or (0.0, 0.0, 0.0)))
         pending.append(policy(pert.corrupt(state, rng), command))
         state = env.step(pending.popleft())
 

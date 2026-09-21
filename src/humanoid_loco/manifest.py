@@ -49,6 +49,9 @@ class PolicyManifest:
     # Isaac Lab DCMotor model: available torque shrinks linearly with joint speed.
     saturation_effort: list[float] | None = None
     velocity_limit: list[float] | None = None
+    # Training-asset joint dynamics the deployment plant must reproduce (sim-to-sim only).
+    armature: list[float] | None = None  # reflected rotor inertia [kg m^2]
+    joint_friction: list[float] | None = None  # dry friction torque [N m]
     onnx: str = "policy.onnx"
     source: dict = field(default_factory=dict)  # provenance: task id, checkpoint, git sha
 

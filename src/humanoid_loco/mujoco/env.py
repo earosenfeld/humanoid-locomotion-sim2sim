@@ -69,6 +69,12 @@ class MujocoG1:
         self.kp = np.asarray(manifest.kp)
         self.kd = np.asarray(manifest.kd)
         self.default_pos = np.asarray(manifest.default_joint_pos)
+        # nominal plant parameters, so perturbations can be applied idempotently
+        self.nominal = {
+            "body_mass": m.body_mass.copy(),
+            "geom_friction": m.geom_friction.copy(),
+            "kp": self.kp.copy(),
+        }
         self.reset()
 
     # ---- state ---------------------------------------------------------------------

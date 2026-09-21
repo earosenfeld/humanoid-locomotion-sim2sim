@@ -4,7 +4,9 @@ The Menagerie G1 ships with stiff position actuators (kp=500). We replace them w
   * torque motors on every policy joint  -> explicit PD in ``env.py`` (what a real SDK does)
   * position actuators on held joints    -> upper body parked at the training default pose
 and add an IMU (gyro, orientation, velocimeter) at the pelvis so observations come from
-sensors, not from privileged simulator state.
+sensors, not from privileged simulator state. Joint armature and dry friction on policy joints
+are overwritten from the manifest: they are training-asset numbers, and armature alone was
+worth a third of the forward speed in the first sim-to-sim run.
 """
 
 from __future__ import annotations
@@ -32,10 +34,17 @@ def build_model(
 
     for act in list(spec.actuators):
         spec.delete(act)
-    for name, limit in zip(manifest.joint_names, manifest.torque_limit, strict=True):
+    joints = {j.name: j for j in spec.joints}
+    for i, (name, limit) in enumerate(
+        zip(manifest.joint_names, manifest.torque_limit, strict=True)
+    ):
         act = _joint_actuator(spec, name)
         act.set_to_motor()
         act.ctrllimited, act.ctrlrange = True, [-limit, limit]
+        if manifest.armature is not None:
+            joints[name].armature = manifest.armature[i]
+        if manifest.joint_friction is not None:
+            joints[name].frictionloss = manifest.joint_friction[i]
     model_joints = {j.name for j in spec.joints}
     for name, held in manifest.held_joints.items():
         if name in model_joints:  # training asset may carry joints this model lacks (hands)

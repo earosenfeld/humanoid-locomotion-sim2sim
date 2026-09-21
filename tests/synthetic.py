@@ -58,6 +58,8 @@ def g1_manifest(onnx_path: str = "policy.onnx") -> PolicyManifest:
         action_scale=[0.5] * n,
         saturation_effort=col(4),
         velocity_limit=col(5),
+        armature=[0.03] * n,
+        joint_friction=[0.0] * n,
         obs_terms=[
             ObsTerm("base_ang_vel", 3),
             ObsTerm("projected_gravity", 3),
