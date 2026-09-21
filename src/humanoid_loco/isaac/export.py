@@ -74,11 +74,13 @@ def _per_joint_actuator_params(robot) -> dict[str, np.ndarray]:
     """Flatten every actuator group's tensors into (num_joints,) arrays; NaN where absent."""
     out = {k: np.full(robot.num_joints, np.nan) for k in _PARAMS}
     for act in robot.actuators.values():
+        idx = act.joint_indices
+        idx = idx.cpu().numpy() if torch.is_tensor(idx) else idx
         for key, attr in _PARAMS.items():
             value = getattr(act, attr, None)
             if value is not None:
                 value = value[0].cpu().numpy() if torch.is_tensor(value) else float(value)
-                out[key][act.joint_indices] = value
+                out[key][idx] = value
     return out
 
 

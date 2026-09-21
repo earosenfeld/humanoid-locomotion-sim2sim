@@ -5,19 +5,28 @@
 2. Policy observations drop ``base_lin_vel`` (not measurable on hardware); an asymmetric
    ``critic`` group keeps it, noise-free.
 3. Rewards that reference joints the policy no longer commands are removed.
+4. Kneeling is not a solution: the stock task terminates only on torso contact, and with the
+   29-DOF model's softer leg gains PPO found a stable knee-fall (base at 0.15 m, zero speed)
+   that never terminates. Low base height and bad orientation now terminate, and a base-height
+   reward keeps the gait upright.
 """
 
 from __future__ import annotations
 
 import copy
 
+import isaaclab.envs.mdp as mdp
+from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.utils import configclass
 from isaaclab_assets.robots.unitree import G1_29DOF_CFG
 from isaaclab_tasks.manager_based.locomotion.velocity.config.g1.flat_env_cfg import (
     G1FlatEnvCfg,
     G1FlatEnvCfg_PLAY,
 )
+
+STAND_HEIGHT = 0.74  # pelvis height of the 29-DOF G1 in its default (slightly crouched) pose
 
 LEG_JOINTS = [
     ".*_hip_yaw_joint",
@@ -46,6 +55,16 @@ def _to_12dof(cfg: G1FlatEnvCfg) -> None:
     cfg.rewards.joint_deviation_arms = None
     cfg.rewards.joint_deviation_fingers = None
     cfg.rewards.joint_deviation_torso = None
+
+    cfg.terminations.base_height = DoneTerm(
+        func=mdp.root_height_below_minimum, params={"minimum_height": 0.5}
+    )
+    cfg.terminations.bad_orientation = DoneTerm(
+        func=mdp.bad_orientation, params={"limit_angle": 0.8}
+    )
+    cfg.rewards.base_height = RewTerm(
+        func=mdp.base_height_l2, weight=-1.0, params={"target_height": STAND_HEIGHT}
+    )
 
 
 @configclass
