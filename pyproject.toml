@@ -15,7 +15,7 @@ dependencies = ["numpy>=1.26", "onnxruntime>=1.18", "pyyaml>=6"]
 [project.optional-dependencies]
 mujoco = ["mujoco>=3.2", "imageio[ffmpeg]>=2.34", "matplotlib>=3.8"]
 isaac = ["gymnasium>=0.29"]          # isaaclab itself is installed by scripts/setup-isaaclab-windows.ps1
-dev = ["pytest>=8", "ruff>=0.5", "onnx>=1.16"]
+dev = ["pytest>=8", "ruff>=0.5", "onnx>=1.16", "tensorboard>=2.16"]
 
 [project.scripts]
 hls = "humanoid_loco.cli:main"
