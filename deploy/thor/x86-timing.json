@@ -1,0 +1,15 @@
+{
+  "host": {
+    "machine": "x86_64",
+    "node": "ChangeUs-Server",
+    "ort": "1.30.0"
+  },
+  "providers": {
+    "CPUExecutionProvider": {
+      "p50": 6.438,
+      "p99": 18.245679999999993,
+      "max": 267.657,
+      "n": 2000
+    }
+  }
+}
