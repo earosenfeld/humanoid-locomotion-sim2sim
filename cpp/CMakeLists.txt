@@ -28,6 +28,7 @@ add_executable(hls_loop
   src/manifest.cpp src/obs.cpp src/policy.cpp src/plant.cpp src/loop.cpp src/main.cpp)
 target_include_directories(hls_loop PRIVATE include)
 target_link_libraries(hls_loop PRIVATE nlohmann_json::nlohmann_json mujoco onnxruntime pthread)
-target_compile_options(hls_loop PRIVATE -O2 -Wall -Wextra)
+# -ffp-contract=off: no fused multiply-add, so the loop is bit-exact with the numpy reference plant
+target_compile_options(hls_loop PRIVATE -O2 -Wall -Wextra -ffp-contract=off)
 set_target_properties(hls_loop PROPERTIES BUILD_RPATH
   "${mujoco_bin_SOURCE_DIR}/lib;${ort_bin_SOURCE_DIR}/lib")
