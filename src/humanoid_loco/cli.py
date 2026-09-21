@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> None:
     sw.add_argument("--seeds", type=int, default=5)
     sw.add_argument("--mass", type=float, nargs="+", default=[0.8, 1.0, 1.2, 1.4])
     sw.add_argument("--friction", type=float, nargs="+", default=[0.4, 0.7, 1.0])
+    sw.add_argument("--delay", type=int, nargs="+", default=[0], help="action delay [policy steps]")
+    sw.add_argument("--gyro-noise", type=float, nargs="+", default=[0.0])
     sw.add_argument("--menagerie", type=Path, default=MENAGERIE)
     sw.add_argument("--out", type=Path)
 
@@ -51,6 +53,9 @@ def main(argv: list[str] | None = None) -> None:
     pc.add_argument("--commands", type=Path, default=Path("configs/commands/walk.yaml"))
     pc.add_argument("--menagerie", type=Path, default=MENAGERIE)
     pc.add_argument("--control-dt", type=float, default=0.001)
+
+    rp = sub.add_parser("report", help="render sim2sim/sweep json files as Markdown tables")
+    rp.add_argument("reports", type=Path, nargs="+")
 
     rc = sub.add_parser("score", help="score a trajectory json (e.g. from cpp/hls_loop)")
     rc.add_argument("--run", type=Path, required=True)
@@ -64,6 +69,7 @@ def main(argv: list[str] | None = None) -> None:
         "sweep": _sweep,
         "prepare-cpp": _prepare_cpp,
         "score": _score,
+        "report": _report,
     }[a.cmd](a)
 
 
@@ -120,13 +126,27 @@ def _sim2sim(a) -> None:
 
 
 def _sweep(a) -> None:
-    from humanoid_loco.mujoco.metrics import markdown_table, sweep, write_report
+    from humanoid_loco.mujoco.metrics import markdown_report, sweep, write_report
 
     manifest, policy, make_env, schedule = _load_run(a)
-    rows = sweep(make_env, policy, schedule, a.mass, a.friction, range(a.seeds))
+    axes = {"mass_scale": a.mass, "friction_scale": a.friction}
+    if a.delay != [0]:
+        axes["action_delay"] = a.delay
+    if a.gyro_noise != [0.0]:
+        axes["gyro_noise"] = a.gyro_noise
+    rows = sweep(make_env, policy, schedule, range(a.seeds), **axes)
     out = a.out or a.run / f"sweep-{schedule.name}.json"
     write_report(out, schedule=schedule.name, grid=rows, source=manifest.source)
-    print(markdown_table(rows, ["mass_scale", "friction_scale", "fall_rate", "vx_rmse"]))
+    print(markdown_report({"grid": rows}))
+
+
+def _report(a) -> None:
+    import json
+
+    from humanoid_loco.mujoco.metrics import markdown_report
+
+    for path in a.reports:
+        print(f"### {path.name}\n\n{markdown_report(json.loads(path.read_text()))}")
 
 
 def _prepare_cpp(a) -> None:

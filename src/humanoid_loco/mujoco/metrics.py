@@ -49,20 +49,17 @@ def evaluate_schedule(
 
 
 def sweep(
-    make_env,
-    policy: OnnxPolicy,
-    schedule: Schedule,
-    mass_scales: Iterable[float],
-    friction_scales: Iterable[float],
-    seeds: range,
+    make_env, policy: OnnxPolicy, schedule: Schedule, seeds: range, **axes: Iterable
 ) -> list[dict]:
-    """Fall rate across a mass x friction grid. ``make_env`` returns a fresh plant per cell."""
+    """Metrics over the cartesian product of ``Perturbation`` fields, e.g.
+    ``sweep(..., mass_scale=[0.8, 1.2], friction_scale=[0.4, 1.0])``. Fresh plant per cell."""
     rows = []
-    for ms, fs in itertools.product(mass_scales, friction_scales):
-        env = make_env()
-        pert = Perturbation(mass_scale=ms, friction_scale=fs)
-        m = evaluate_schedule(env, policy, schedule, seeds, perturbation=pert)
-        rows.append({"mass_scale": ms, "friction_scale": fs, **m})
+    for values in itertools.product(*axes.values()):
+        cell = dict(zip(axes, values, strict=True))
+        m = evaluate_schedule(
+            make_env(), policy, schedule, seeds, perturbation=Perturbation(**cell)
+        )
+        rows.append({**cell, **m})
     return rows
 
 
@@ -70,6 +67,17 @@ def write_report(path: str | Path, **sections) -> Path:
     path = Path(path)
     path.write_text(json.dumps(sections, indent=2) + "\n")
     return path
+
+
+def markdown_report(report: dict) -> str:
+    """Render a sim2sim or sweep report json as Markdown tables (used for the README)."""
+    if "grid" in report:
+        axes = [k for k in report["grid"][0] if k in Perturbation.__dataclass_fields__]
+        return markdown_table(report["grid"], axes + ["fall_rate", "vx_rmse", "yaw_rate_rmse"])
+    cols = ["fall_rate", "vx_rmse", "vy_rmse", "yaw_rate_rmse", "torque_saturation_pct", "n_runs"]
+    return markdown_table(
+        [{"schedule": report["schedule"], **report["summary"]}], ["schedule"] + cols
+    )
 
 
 def markdown_table(rows: list[dict], columns: list[str], fmt: str = "{:.3f}") -> str:

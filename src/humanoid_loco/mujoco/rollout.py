@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -46,16 +47,28 @@ class Schedule:
 
 @dataclass(frozen=True)
 class Perturbation:
-    """Multiplicative domain shifts applied to the plant before a rollout."""
+    """Domain shifts a real deployment sees and training did not."""
 
     mass_scale: float = 1.0  # pelvis mass
     friction_scale: float = 1.0  # floor sliding friction
-    kp_scale: float = 1.0  # actuator stiffness (models gain mismatch on hardware)
+    kp_scale: float = 1.0  # actuator stiffness (gain mismatch on hardware)
+    action_delay: int = 0  # policy steps of transport delay between inference and PD target
+    gyro_noise: float = 0.0  # rad/s, white noise on the IMU rate
+    joint_vel_noise: float = 0.0  # rad/s, white noise on encoder-differenced velocity
 
     def apply(self, env: MujocoG1) -> None:
         env.model.body_mass[env.pelvis] *= self.mass_scale
         env.model.geom_friction[env.model.geom("floor").id, 0] *= self.friction_scale
         env.kp = env.kp * self.kp_scale
+
+    def corrupt(self, state, rng: np.random.Generator):
+        if self.gyro_noise:
+            state.base_ang_vel = state.base_ang_vel + rng.normal(0, self.gyro_noise, 3)
+        if self.joint_vel_noise:
+            state.joint_vel = state.joint_vel + rng.normal(
+                0, self.joint_vel_noise, state.joint_vel.size
+            )
+        return state
 
 
 @dataclass
@@ -103,13 +116,15 @@ def rollout(
     renderer = _Renderer(env) if frames is not None else None
 
     traj = Trajectory()
+    pert = perturbation or Perturbation()
+    pending = deque([env.default_pos] * pert.action_delay)  # transport-delay line for targets
     steps = int(round(schedule.duration / env.manifest.policy_dt))
     for k in range(steps):
         seg = schedule.at(env.time)
         command = np.asarray(seg.command, np.float32)
         env.push(np.asarray(seg.push or (0.0, 0.0, 0.0)))
-        targets = policy(state, command)
-        state = env.step(targets)
+        pending.append(policy(pert.corrupt(state, rng), command))
+        state = env.step(pending.popleft())
 
         traj.time.append(env.time)
         traj.command.append(command)
