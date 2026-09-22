@@ -9,6 +9,8 @@
    29-DOF model's softer leg gains PPO found a stable knee-fall (base at 0.15 m, zero speed)
    that never terminates. Low base height and bad orientation now terminate, and a base-height
    reward keeps the gait upright.
+5. Actions reach the PD with a per-env transport delay of 0-2 policy steps (0-40 ms), resampled
+   at reset, so the policy tolerates real inference-to-actuator latency.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ from isaaclab_tasks.manager_based.locomotion.velocity.config.g1.flat_env_cfg imp
     G1FlatEnvCfg_PLAY,
 )
 
+from humanoid_loco.isaac.actions import DelayedJointPositionActionCfg
+
 STAND_HEIGHT = 0.74  # pelvis height of the 29-DOF G1 in its default (slightly crouched) pose
 
 LEG_JOINTS = [
@@ -42,7 +46,9 @@ def _to_12dof(cfg: G1FlatEnvCfg) -> None:
     cfg.scene.robot = G1_29DOF_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     cfg.scene.robot.spawn.activate_contact_sensors = True  # feet / torso contact rewards
 
-    cfg.actions.joint_pos.joint_names = LEG_JOINTS
+    cfg.actions.joint_pos = DelayedJointPositionActionCfg(
+        asset_name="robot", joint_names=LEG_JOINTS, scale=0.5, use_default_offset=True, max_delay=2
+    )
 
     policy = cfg.observations.policy
     critic = copy.deepcopy(policy)  # privileged copy: keeps base_lin_vel, no noise
