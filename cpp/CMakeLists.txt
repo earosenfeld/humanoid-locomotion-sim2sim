@@ -1,5 +1,6 @@
 # 1 kHz humanoid control loop: manifest -> ONNX policy -> PD -> plant (MuJoCo, or your robot).
 # Dependencies are fetched by CMake (Linux x86_64 prebuilt MuJoCo + onnxruntime, header-only json).
+# The MuJoCo version MUST match pyproject.toml (mujoco==3.13.0): scene.mjb is written by Python.
 cmake_minimum_required(VERSION 3.28)
 project(hls_loop LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
