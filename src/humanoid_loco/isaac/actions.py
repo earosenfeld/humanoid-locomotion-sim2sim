@@ -25,7 +25,9 @@ class DelayedJointPositionAction(JointPositionAction):
     def reset(self, env_ids=None) -> None:
         super().reset(env_ids)
         ids = list(range(self.num_envs)) if env_ids is None else env_ids
-        lag = torch.randint(0, self.cfg.max_delay + 1, (len(ids),), device=self.device)
+        lag = torch.randint(
+            0, self.cfg.max_delay + 1, (len(ids),), device=self.device, dtype=torch.int
+        )
         self._delay.set_time_lag(lag, ids)
         self._delay.reset(ids)
 

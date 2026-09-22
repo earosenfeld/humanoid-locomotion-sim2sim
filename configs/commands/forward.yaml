@@ -1,0 +1,7 @@
+# Forward-only schedule: isolates latency and gain effects from lateral/turning skills.
+name: forward
+segments:
+  - {duration: 2.0, command: [0.0, 0.0, 0.0]}
+  - {duration: 6.0, command: [0.5, 0.0, 0.0]}
+  - {duration: 6.0, command: [1.0, 0.0, 0.0]}
+  - {duration: 2.0, command: [0.0, 0.0, 0.0]}

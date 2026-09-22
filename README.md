@@ -31,9 +31,14 @@ Sim-to-sim findings, all measured, all reproducible with one command each:
   102 N, all fall at 120 N. Training pushes were 0.5 m/s velocity kicks, roughly 17 N s.
 - **Domain shift:** zero falls across ±40 % pelvis mass and floor friction from 0.5 to 1.0;
   friction 0.3 fails on every mass. Gyro noise of 0.2 rad/s changes nothing.
-- **Latency is the deployment risk.** One policy step (20 ms) of action delay makes 80 % of runs
-  fall; two steps, all of them. This policy needs delay randomization in training before it
-  goes near hardware. The training config does not have it yet, and the sweep is the reason.
+- **Latency is the deployment risk, and delay randomization fixes it.** Trained without delay,
+  the policy falls in 20 % of runs at one policy step (20 ms) of action transport delay and in all
+  runs at two. Retrained with a per-environment delay of 0 to 2 steps resampled at every reset
+  (`isaac/actions.py`, built on Isaac Lab's `DelayBuffer`), it walks with zero falls up to three
+  steps (60 ms), beyond what it trained on, and fails at four. Cost: the delay-trained policy
+  passes every skill in isolation (forward, lateral, turning) but falls on the walk schedule's
+  abrupt switch from 1.0 m/s forward into 0.5 m/s lateral, which the no-delay policy survives.
+  Both exports ship (`export/` and `export-delay/`); the README figures use the no-delay one.
 - **A first training run silently failed.** The stock Isaac Lab G1 task terminates only on torso
   contact. On the 29-DOF asset with its softer leg gains PPO found a stable knee-fall (pelvis at
   0.15 m, zero speed) that never terminated and scored a healthy-looking reward. MuJoCo reproduced
@@ -43,7 +48,8 @@ Sim-to-sim findings, all measured, all reproducible with one command each:
 | Figure | |
 |---|---|
 | ![velocity tracking](assets/velocity_tracking.png) | ![robustness sweep](assets/robustness_sweep.png) |
-| ![push recovery](assets/push_recovery.png) | ![reward curve](assets/reward_curve.png) |
+| ![push recovery](assets/push_recovery.png) | ![latency robustness](assets/latency_robustness.png) |
+| ![reward curve](assets/reward_curve.png) | |
 
 ![gait cycle](assets/gait_cycle.png)
 
@@ -63,8 +69,9 @@ flowchart LR
 
 - **`src/humanoid_loco/isaac/`** — the Isaac Lab task: the stock G1 flat velocity task with the
   29-DOF G1 asset (joint names identical to MuJoCo Menagerie), actions restricted to the 12 leg
-  joints, `base_lin_vel` removed from the policy observations (not measurable on hardware) with an
-  asymmetric critic that keeps it, and the terminations above. Isaac Lab's pip package ships no
+  joints and passed through a per-env transport delay, `base_lin_vel` removed from the policy
+  observations (not measurable on hardware) with an asymmetric critic that keeps it, and the
+  terminations above. Isaac Lab's pip package ships no
   train/play scripts, so `runner.py` provides them.
 - **`manifest.py`** — the single source of truth. Joint order, default pose, PD gains, DC-motor
   saturation, armature, action scale and clip, observation layout, physics and decimation rates.
@@ -111,7 +118,7 @@ git -C third_party/mujoco_menagerie sparse-checkout set unitree_g1
 pytest -q
 hls sim2sim --run runs/g1_flat_12dof/export --commands configs/commands/walk.yaml --video walk.mp4
 hls sweep   --run runs/g1_flat_12dof/export --mass 0.8 1.0 1.2 1.4 --friction 0.3 0.5 0.7 1.0
-hls sweep   --run runs/g1_flat_12dof/export --delay 0 1 2 3 --gyro-noise 0 0.2
+hls sweep   --run runs/g1_flat_12dof/export --commands configs/commands/forward.yaml --delay 0 1 2 3 4
 hls report  runs/g1_flat_12dof/export/sweep-walk.json
 cmake -S cpp -B build -G Ninja && cmake --build build           # see cpp/README.md for a root-free toolchain
 hls prepare-cpp --run runs/g1_flat_12dof/export && build/hls_loop --run runs/g1_flat_12dof/export --schedule runs/g1_flat_12dof/export/schedule-walk.json
