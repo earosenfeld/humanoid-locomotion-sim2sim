@@ -28,7 +28,7 @@ def test_cpp_loop_matches_python_bit_for_bit(env, manifest, run_dir, menagerie):
     )
     (run_dir / "schedule.json").write_text(json.dumps(schedule.to_dict()))
     out = run_dir / "cpp.json"
-    subprocess.run(
+    proc = subprocess.run(
         [
             BINARY,
             "--run",
@@ -41,9 +41,10 @@ def test_cpp_loop_matches_python_bit_for_bit(env, manifest, run_dir, menagerie):
             "--timing",
             run_dir / "timing.json",
         ],
-        check=True,
         capture_output=True,
+        text=True,
     )
+    assert proc.returncode == 0, f"hls_loop exit {proc.returncode}\n{proc.stdout}\n{proc.stderr}"
     cpp = Trajectory.from_dict(json.loads(out.read_text()))
     policy = OnnxPolicy(manifest, run_dir / "policy.onnx")
     py = rollout(env, policy, schedule, seed=0, init_noise=0.0)
