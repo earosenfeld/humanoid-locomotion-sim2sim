@@ -107,6 +107,45 @@ def comparison_table(runs: dict[str, Path], schedules: list[str]) -> str:
     return markdown_table(rows, list(rows[0]), fmt="{:.2f}")
 
 
+def latency_curves(run_dir: Path) -> dict[str, list[tuple[int, float]]]:
+    """(delay steps, fall rate) per simulator for one run dir: MuJoCo from the forward sweep,
+    Isaac from ``isaac-forward.json`` (delay 0) and ``isaac-forward-delay<N>.json``."""
+    run_dir = Path(run_dir)
+    curves: dict[str, list[tuple[int, float]]] = {}
+    sweep = run_dir / "sweep-latency-forward.json"
+    if sweep.exists():
+        rows = json.loads(sweep.read_text())["grid"]
+        curves["mujoco"] = sorted((int(r["action_delay"]), r["fall_rate"]) for r in rows)
+    isaac = []
+    for path in [run_dir / "isaac-forward.json", *run_dir.glob("isaac-forward-delay*.json")]:
+        if path.exists():
+            rep = json.loads(path.read_text())
+            isaac.append((int(rep.get("action_delay", 0)), rep["summary"]["fall_rate"]))
+    if isaac:
+        curves["isaac"] = sorted(isaac)
+    return curves
+
+
+def latency_table(runs: dict[str, Path], policy_dt: float) -> str:
+    rows = []
+    for label, run_dir in runs.items():
+        curves = latency_curves(run_dir)
+        delays = sorted({d for c in curves.values() for d, _ in c})
+        for sim, curve in curves.items():
+            fall = dict(curve)
+            rows.append(
+                {
+                    "policy": label,
+                    "simulator": sim,
+                    **{
+                        f"{round(1e3 * policy_dt * d)} ms": f"{fall[d]:.0%}" if d in fall else "-"
+                        for d in delays
+                    },
+                }
+            )
+    return markdown_table(rows, list(rows[0]))
+
+
 def markdown_table(rows: list[dict], columns: list[str], fmt: str = "{:.3f}") -> str:
     head = "| " + " | ".join(columns) + " |\n|" + "---|" * len(columns) + "\n"
     body = "".join(

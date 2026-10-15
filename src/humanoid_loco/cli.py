@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> None:
     cp = sub.add_parser("compare", help="Isaac-vs-MuJoCo table over run dirs (label=dir ...)")
     cp.add_argument("runs", nargs="+", help="label=run_dir pairs")
     cp.add_argument("--schedules", nargs="+", default=["forward", "walk", "push"])
+    cp.add_argument("--latency", action="store_true", help="also print the latency table")
 
     rc = sub.add_parser("score", help="score a trajectory json (e.g. from cpp/hls_loop)")
     rc.add_argument("--run", type=Path, required=True)
@@ -175,8 +176,14 @@ def _sweep(a) -> None:
 def _compare(a) -> None:
     from humanoid_loco.metrics import comparison_table
 
-    runs = dict(pair.split("=", 1) for pair in a.runs)
-    print(comparison_table({k: Path(v) for k, v in runs.items()}, a.schedules))
+    runs = {k: Path(v) for k, v in (pair.split("=", 1) for pair in a.runs)}
+    print(comparison_table(runs, a.schedules))
+    if a.latency:
+        from humanoid_loco.manifest import PolicyManifest
+        from humanoid_loco.metrics import latency_table
+
+        dt = PolicyManifest.load(next(iter(runs.values())) / "policy.json").policy_dt
+        print("\n" + latency_table(runs, dt))
 
 
 def _report(a) -> None:

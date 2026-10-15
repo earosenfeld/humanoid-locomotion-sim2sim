@@ -122,22 +122,25 @@ def figure_push_recovery(sweep_json: Path, out: Path) -> Path:
     return out
 
 
-def figure_latency(sweeps: dict[str, Path], out: Path, policy_dt: float) -> Path:
-    fig, ax = plt.subplots(figsize=(6.5, 4))
-    for (label, path), color in zip(sweeps.items(), PALETTE, strict=False):
-        rows = sorted(json.loads(path.read_text())["grid"], key=lambda r: r["action_delay"])
-        ax.plot(
-            [1e3 * policy_dt * r["action_delay"] for r in rows],
-            [100 * r["fall_rate"] for r in rows],
-            marker="o",
-            color=color,
-            label=label,
-        )
+def figure_latency(runs: dict[str, Path], out: Path, policy_dt: float) -> Path:
+    from humanoid_loco.metrics import latency_curves
+
+    fig, ax = plt.subplots(figsize=(7, 4.2))
+    for (label, run_dir), color in zip(runs.items(), PALETTE, strict=False):
+        for sim, curve in latency_curves(run_dir).items():
+            ax.plot(
+                [1e3 * policy_dt * d for d, _ in curve],
+                [100 * f for _, f in curve],
+                marker="o" if sim == "mujoco" else "s",
+                ls="-" if sim == "mujoco" else "--",
+                color=color,
+                label=f"{label}, {sim}",
+            )
     ax.set_xlabel("action transport delay [ms]  (forward schedule, 0.5 then 1.0 m/s)")
     ax.set_ylabel("fall rate [%]")
     ax.set_ylim(-5, 105)
-    ax.set_title("Latency tolerance: effect of delay randomization")
-    ax.legend()
+    ax.set_title("Latency tolerance in both simulators")
+    ax.legend(fontsize=9)
     fig.savefig(out)
     return out
 
@@ -171,6 +174,7 @@ def main() -> None:
     )
     p.add_argument("--tb", type=Path, help="rsl_rl log dir with events.out.tfevents.*")
     p.add_argument("--delay-run", type=Path, help="export dir of the delay-randomized policy")
+    p.add_argument("--switch-run", type=Path, help="export dir of the delay + fast-switch policy")
     p.add_argument("--menagerie", type=Path, default=MENAGERIE)
     a = p.parse_args()
     ASSETS.mkdir(exist_ok=True)
@@ -187,12 +191,11 @@ def main() -> None:
     push = a.run / "sweep-push.json"
     if push.exists():
         print(figure_push_recovery(push, ASSETS / "push_recovery.png"))
-    if a.delay_run and (a.delay_run / "sweep-latency-forward.json").exists():
-        sweeps = {
-            "trained without delay": a.run / "sweep-latency-forward.json",
-            "trained with 0-40 ms delay": a.delay_run / "sweep-latency-forward.json",
-        }
-        print(figure_latency(sweeps, ASSETS / "latency_robustness.png", manifest.policy_dt))
+    if a.delay_run:
+        runs = {"no delay": a.run, "delay 0-40 ms": a.delay_run}
+        if a.switch_run:
+            runs["delay + fast switches"] = a.switch_run
+        print(figure_latency(runs, ASSETS / "latency_robustness.png", manifest.policy_dt))
     if a.tb:
         print(figure_reward_curve(a.tb, ASSETS / "reward_curve.png"))
 
