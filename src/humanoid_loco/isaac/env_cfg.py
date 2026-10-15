@@ -107,3 +107,6 @@ class G1Flat12DofEnvCfg_EVAL(G1Flat12DofEnvCfg_PLAY):
         self.episode_length_s = 120.0  # longer than any schedule; a time-out is not a fall
         # the schedule drives all three command channels; no heading controller overriding yaw
         self.commands.base_velocity.heading_command = False
+        self.commands.base_velocity.rel_standing_envs = 0.0  # no envs with commands forced to zero
+        self.actions.joint_pos.max_delay = 4  # buffer depth; the evaluator fixes the lag explicitly
+        self.commands.base_velocity.resampling_time_range = (1e3, 1e3)

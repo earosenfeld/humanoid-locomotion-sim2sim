@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> None:
     ev.add_argument("--seeds", type=int, default=10, help="one Isaac env per seed")
     ev.add_argument("--headless", action="store_true")
     ev.add_argument("--device", default="cuda:0")
+    ev.add_argument("--delay", type=int, default=0, help="action transport delay [policy steps]")
     ev.add_argument("--out", type=Path, required=True)
 
     s2s = sub.add_parser("sim2sim", help="run the exported policy in MuJoCo and report metrics")

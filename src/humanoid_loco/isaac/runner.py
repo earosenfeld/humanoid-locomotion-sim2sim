@@ -106,6 +106,7 @@ def evaluate_schedule(
     headless: bool,
     device: str,
     out: Path,
+    action_delay: int = 0,
 ) -> dict:
     """Run a command schedule in Isaac Lab, one seed per env, scored exactly like MuJoCo.
 
@@ -125,7 +126,10 @@ def evaluate_schedule(
     schedule = Schedule.from_yaml(schedule_path)
     env, _, agent_cfg = _make_env(task, num_envs, device)
     u = env.unwrapped
-    robot, ids = u.scene["robot"], u.action_manager.get_term("joint_pos")._joint_ids
+    action_term = u.action_manager.get_term("joint_pos")
+    robot, ids = u.scene["robot"], action_term._joint_ids
+    action_term.fixed_delay = action_delay  # same transport delay semantics as the MuJoCo sweep
+    action_term.reset()
     pelvis = robot.body_names.index("pelvis")
     manifest = build_manifest(u, {"task": task, "checkpoint": checkpoint})
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
@@ -182,6 +186,7 @@ def evaluate_schedule(
         "summary": aggregate(runs),
         "source": manifest.source,
         "simulator": "isaac_lab",
+        "action_delay": action_delay,
     }
     write_report(out, **report)
     s = report["summary"]

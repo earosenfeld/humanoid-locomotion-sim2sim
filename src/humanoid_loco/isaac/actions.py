@@ -18,6 +18,9 @@ from isaaclab.utils.buffers import DelayBuffer
 class DelayedJointPositionAction(JointPositionAction):
     cfg: DelayedJointPositionActionCfg
 
+    fixed_delay: int | None = None
+    """Evaluation hook: when set, every env uses this lag instead of sampling one at reset."""
+
     def __init__(self, cfg: DelayedJointPositionActionCfg, env) -> None:
         super().__init__(cfg, env)
         self._delay = DelayBuffer(cfg.max_delay, self.num_envs, device=self.device)
@@ -25,9 +28,12 @@ class DelayedJointPositionAction(JointPositionAction):
     def reset(self, env_ids=None) -> None:
         super().reset(env_ids)
         ids = list(range(self.num_envs)) if env_ids is None else env_ids
-        lag = torch.randint(
-            0, self.cfg.max_delay + 1, (len(ids),), device=self.device, dtype=torch.int
-        )
+        if self.fixed_delay is None:
+            lag = torch.randint(
+                0, self.cfg.max_delay + 1, (len(ids),), device=self.device, dtype=torch.int
+            )
+        else:
+            lag = torch.full((len(ids),), self.fixed_delay, device=self.device, dtype=torch.int)
         self._delay.set_time_lag(lag, ids)
         self._delay.reset(ids)
 
