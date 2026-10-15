@@ -115,13 +115,15 @@ def _play(a) -> None:
 def _eval_isaac(a) -> None:
     from humanoid_loco.isaac.runner import evaluate_schedule, resolve_checkpoint
 
-    r = evaluate_schedule(
-        a.task, resolve_checkpoint(a.checkpoint), a.commands, a.seeds, a.headless, a.device, a.out
-    )
-    s = r["summary"]
-    print(
-        f"isaac {r['schedule']}: fall_rate={s['fall_rate']:.2f} vx_rmse={s['vx_rmse']:.3f} "
-        f"yaw_rmse={s['yaw_rate_rmse']:.3f} -> {a.out}"
+    evaluate_schedule(
+        a.task,
+        resolve_checkpoint(a.checkpoint),
+        a.commands,
+        a.seeds,
+        a.headless,
+        a.device,
+        a.out,
+        a.delay,
     )
 
 
