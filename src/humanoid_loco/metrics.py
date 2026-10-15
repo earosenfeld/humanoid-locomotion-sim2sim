@@ -89,6 +89,24 @@ def markdown_report(report: dict) -> str:
     )
 
 
+def comparison_table(runs: dict[str, Path], schedules: list[str]) -> str:
+    """Isaac-vs-MuJoCo table from ``isaac-<s>.json`` / ``sim2sim-<s>.json`` in each run dir."""
+    rows = []
+    for label, run_dir in runs.items():
+        for sched in schedules:
+            cells = {"policy": label, "schedule": sched}
+            for sim, prefix in (("isaac", "isaac"), ("mujoco", "sim2sim")):
+                path = Path(run_dir) / f"{prefix}-{sched}.json"
+                if path.exists():
+                    s = json.loads(path.read_text())["summary"]
+                    cells[f"{sim} falls"] = f"{s['fall_rate']:.0%}"
+                    cells[f"{sim} vx rmse"] = s["vx_rmse"]
+                else:
+                    cells[f"{sim} falls"] = cells[f"{sim} vx rmse"] = "-"
+            rows.append(cells)
+    return markdown_table(rows, list(rows[0]), fmt="{:.2f}")
+
+
 def markdown_table(rows: list[dict], columns: list[str], fmt: str = "{:.3f}") -> str:
     head = "| " + " | ".join(columns) + " |\n|" + "---|" * len(columns) + "\n"
     body = "".join(

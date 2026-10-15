@@ -67,6 +67,10 @@ def main(argv: list[str] | None = None) -> None:
     rp = sub.add_parser("report", help="render sim2sim/sweep json files as Markdown tables")
     rp.add_argument("reports", type=Path, nargs="+")
 
+    cp = sub.add_parser("compare", help="Isaac-vs-MuJoCo table over run dirs (label=dir ...)")
+    cp.add_argument("runs", nargs="+", help="label=run_dir pairs")
+    cp.add_argument("--schedules", nargs="+", default=["forward", "walk", "push"])
+
     rc = sub.add_parser("score", help="score a trajectory json (e.g. from cpp/hls_loop)")
     rc.add_argument("--run", type=Path, required=True)
     rc.add_argument("trajectory", type=Path)
@@ -81,6 +85,7 @@ def main(argv: list[str] | None = None) -> None:
         "prepare-cpp": _prepare_cpp,
         "score": _score,
         "report": _report,
+        "compare": _compare,
     }[a.cmd](a)
 
 
@@ -164,6 +169,13 @@ def _sweep(a) -> None:
     out = a.out or a.run / f"sweep-{schedule.name}.json"
     write_report(out, schedule=schedule.name, grid=rows, source=manifest.source)
     print(markdown_report({"grid": rows}))
+
+
+def _compare(a) -> None:
+    from humanoid_loco.metrics import comparison_table
+
+    runs = dict(pair.split("=", 1) for pair in a.runs)
+    print(comparison_table({k: Path(v) for k, v in runs.items()}, a.schedules))
 
 
 def _report(a) -> None:
