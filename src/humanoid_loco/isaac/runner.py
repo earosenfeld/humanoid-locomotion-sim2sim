@@ -96,3 +96,87 @@ def resolve_checkpoint(spec: str) -> str:
     if not ckpts:
         raise FileNotFoundError(f"no checkpoints under {LOG_ROOT}/")
     return str(ckpts[-1])
+
+
+def evaluate_schedule(
+    task: str,
+    checkpoint: str,
+    schedule_path: Path,
+    num_envs: int,
+    headless: bool,
+    device: str,
+    out: Path,
+) -> dict:
+    """Run a command schedule in Isaac Lab, one seed per env, scored exactly like MuJoCo.
+
+    Commands are forced from the schedule (the env's own sampler is overridden every step) and
+    schedule pushes become an external force on the pelvis, so Isaac and MuJoCo see identical
+    inputs. Early termination counts as a fall.
+    """
+    app = _launch(headless)
+    import numpy as np
+    import torch
+    from rsl_rl.runners import OnPolicyRunner
+
+    from humanoid_loco.isaac.export import build_manifest
+    from humanoid_loco.metrics import Trajectory, aggregate, evaluate, write_report
+    from humanoid_loco.schedule import Schedule
+
+    schedule = Schedule.from_yaml(schedule_path)
+    env, _, agent_cfg = _make_env(task, num_envs, device)
+    u = env.unwrapped
+    robot, ids = u.scene["robot"], u.action_manager.get_term("joint_pos")._joint_ids
+    pelvis = robot.body_names.index("pelvis")
+    manifest = build_manifest(u, {"task": task, "checkpoint": checkpoint})
+    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    runner.load(checkpoint)
+    policy = runner.get_inference_policy(device=u.device)
+    cmd = u.command_manager.get_term("base_velocity")
+    force = torch.zeros(num_envs, 1, 3, device=u.device)
+
+    trajs = [Trajectory() for _ in range(num_envs)]
+    alive = torch.ones(num_envs, dtype=torch.bool, device=u.device)
+    obs = env.get_observations()
+    steps = int(round(schedule.duration / manifest.policy_dt))
+    with torch.inference_mode():
+        for k in range(steps):
+            seg = schedule.at(k * manifest.policy_dt)
+            cmd.vel_command_b[:] = torch.tensor(seg.command, device=u.device)
+            force[:, 0, :] = torch.tensor(seg.push or (0.0, 0.0, 0.0), device=u.device)
+            robot.set_external_force_and_torque(force, torch.zeros_like(force), body_ids=[pelvis])
+            action = policy(obs)
+            obs, _, dones, _ = env.step(action)
+            d = robot.data
+            rows = {
+                "command": np.tile(seg.command, (num_envs, 1)),
+                "base_lin_vel": d.root_lin_vel_b.cpu().numpy(),
+                "base_ang_vel": d.root_ang_vel_b.cpu().numpy(),
+                "base_height": (d.root_pos_w[:, 2] - u.scene.env_origins[:, 2]).cpu().numpy(),
+                "joint_pos": d.joint_pos[:, ids].cpu().numpy(),
+                "joint_vel": d.joint_vel[:, ids].cpu().numpy(),
+                "action": action.cpu().numpy(),
+                "torque": d.applied_torque[:, ids].cpu().numpy(),
+            }
+            for i, traj in enumerate(trajs):
+                if not alive[i]:
+                    continue
+                traj.time.append((k + 1) * manifest.policy_dt)
+                for key, value in rows.items():
+                    getattr(traj, key).append(value[i])
+                if dones[i]:
+                    traj.fell = True
+                    alive[i] = False
+            if not alive.any():
+                break
+    env.close()
+    app.close()
+    runs = [evaluate(t, manifest) for t in trajs]
+    report = {
+        "schedule": schedule.name,
+        "seed0": runs[0],
+        "summary": aggregate(runs),
+        "source": manifest.source,
+        "simulator": "isaac_lab",
+    }
+    write_report(out, **report)
+    return report

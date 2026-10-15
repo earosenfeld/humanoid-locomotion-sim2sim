@@ -29,6 +29,15 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--video-dir", type=Path)
     pl.add_argument("--export-dir", type=Path, help="write policy.onnx + policy.json here")
 
+    ev = sub.add_parser("eval-isaac", help="run a command schedule in Isaac Lab, same metrics")
+    ev.add_argument("--task", default="HLS-G1-Flat-Play-v0")
+    ev.add_argument("--checkpoint", default="latest")
+    ev.add_argument("--commands", type=Path, default=Path("configs/commands/walk.yaml"))
+    ev.add_argument("--seeds", type=int, default=10, help="one Isaac env per seed")
+    ev.add_argument("--headless", action="store_true")
+    ev.add_argument("--device", default="cuda:0")
+    ev.add_argument("--out", type=Path, required=True)
+
     s2s = sub.add_parser("sim2sim", help="run the exported policy in MuJoCo and report metrics")
     s2s.add_argument("--run", type=Path, required=True, help="dir with policy.onnx + policy.json")
     s2s.add_argument("--commands", type=Path, default=Path("configs/commands/walk.yaml"))
@@ -68,6 +77,7 @@ def main(argv: list[str] | None = None) -> None:
         "play": _play,
         "sim2sim": _sim2sim,
         "sweep": _sweep,
+        "eval-isaac": _eval_isaac,
         "prepare-cpp": _prepare_cpp,
         "score": _score,
         "report": _report,
@@ -92,6 +102,19 @@ def _play(a) -> None:
         a.device,
         a.video_dir,
         a.export_dir,
+    )
+
+
+def _eval_isaac(a) -> None:
+    from humanoid_loco.isaac.runner import evaluate_schedule, resolve_checkpoint
+
+    r = evaluate_schedule(
+        a.task, resolve_checkpoint(a.checkpoint), a.commands, a.seeds, a.headless, a.device, a.out
+    )
+    s = r["summary"]
+    print(
+        f"isaac {r['schedule']}: fall_rate={s['fall_rate']:.2f} vx_rmse={s['vx_rmse']:.3f} "
+        f"yaw_rmse={s['yaw_rate_rmse']:.3f} -> {a.out}"
     )
 
 

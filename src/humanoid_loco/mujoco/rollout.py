@@ -3,46 +3,17 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import yaml
 
+from humanoid_loco.metrics import Trajectory
 from humanoid_loco.mujoco.env import MujocoG1
 from humanoid_loco.policy import OnnxPolicy
+from humanoid_loco.schedule import Schedule, Segment
 
-
-@dataclass(frozen=True)
-class Segment:
-    duration: float
-    command: tuple[float, float, float]
-    push: tuple[float, float, float] | None = None  # world-frame force on the pelvis [N]
-
-
-@dataclass(frozen=True)
-class Schedule:
-    name: str
-    segments: tuple[Segment, ...]
-
-    @classmethod
-    def from_yaml(cls, path: str | Path) -> Schedule:
-        raw = yaml.safe_load(Path(path).read_text())
-        return cls(raw["name"], tuple(Segment(**s) for s in raw["segments"]))
-
-    @property
-    def duration(self) -> float:
-        return sum(s.duration for s in self.segments)
-
-    def to_dict(self) -> dict:
-        return {"name": self.name, "segments": [asdict(s) for s in self.segments]}
-
-    def at(self, t: float) -> Segment:
-        for seg in self.segments:
-            if t < seg.duration:
-                return seg
-            t -= seg.duration
-        return self.segments[-1]
+__all__ = ["Perturbation", "Schedule", "Segment", "Trajectory", "rollout", "save_video"]
 
 
 @dataclass(frozen=True)
@@ -75,30 +46,6 @@ class Perturbation:
                 0, self.joint_vel_noise, state.joint_vel.size
             )
         return state
-
-
-@dataclass
-class Trajectory:
-    """Policy-rate time series in manifest joint order. ``fell`` marks early termination."""
-
-    time: list[float] = field(default_factory=list)
-    command: list[np.ndarray] = field(default_factory=list)
-    base_lin_vel: list[np.ndarray] = field(default_factory=list)
-    base_ang_vel: list[np.ndarray] = field(default_factory=list)
-    base_height: list[float] = field(default_factory=list)
-    joint_pos: list[np.ndarray] = field(default_factory=list)
-    joint_vel: list[np.ndarray] = field(default_factory=list)
-    action: list[np.ndarray] = field(default_factory=list)
-    torque: list[np.ndarray] = field(default_factory=list)
-    fell: bool = False
-
-    def arrays(self) -> dict[str, np.ndarray]:
-        return {f.name: np.asarray(getattr(self, f.name)) for f in fields(self) if f.name != "fell"}
-
-    @classmethod
-    def from_dict(cls, d: dict) -> Trajectory:
-        """Inverse of the JSON the C++ loop writes (same keys as the fields here)."""
-        return cls(**{f.name: d[f.name] for f in fields(cls)})
 
 
 def rollout(
