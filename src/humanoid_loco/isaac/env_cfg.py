@@ -90,3 +90,20 @@ class G1Flat12DofEnvCfg_PLAY(G1FlatEnvCfg_PLAY):
     def __post_init__(self) -> None:
         super().__post_init__()
         _to_12dof(self)
+
+
+@configclass
+class G1Flat12DofEnvCfg_EVAL(G1Flat12DofEnvCfg_PLAY):
+    """Deterministic resets, so an Isaac run and a MuJoCo seed start from the same clean stance."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        zero = (0.0, 0.0)
+        self.events.reset_base.params = {
+            "pose_range": {"x": zero, "y": zero, "yaw": zero},
+            "velocity_range": {k: zero for k in ("x", "y", "z", "roll", "pitch", "yaw")},
+        }
+        self.events.reset_robot_joints.params["position_range"] = (1.0, 1.0)
+        self.episode_length_s = 120.0  # longer than any schedule; a time-out is not a fall
+        # the schedule drives all three command channels; no heading controller overriding yaw
+        self.commands.base_velocity.heading_command = False

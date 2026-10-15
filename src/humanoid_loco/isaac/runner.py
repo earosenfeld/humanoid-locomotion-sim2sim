@@ -136,16 +136,22 @@ def evaluate_schedule(
 
     trajs = [Trajectory() for _ in range(num_envs)]
     alive = torch.ones(num_envs, dtype=torch.bool, device=u.device)
+    pushing = False
     obs = env.get_observations()
     steps = int(round(schedule.duration / manifest.policy_dt))
     with torch.inference_mode():
         for k in range(steps):
             seg = schedule.at(k * manifest.policy_dt)
             cmd.vel_command_b[:] = torch.tensor(seg.command, device=u.device)
-            force[:, 0, :] = torch.tensor(seg.push or (0.0, 0.0, 0.0), device=u.device)
-            robot.set_external_force_and_torque(force, torch.zeros_like(force), body_ids=[pelvis])
+            if seg.push or pushing:  # write the wrench only on change (zero clears it)
+                force[:, 0, :] = torch.tensor(seg.push or (0.0, 0.0, 0.0), device=u.device)
+                robot.set_external_force_and_torque(
+                    force, torch.zeros_like(force), body_ids=[pelvis]
+                )
+                pushing = seg.push is not None
             action = policy(obs)
-            obs, _, dones, _ = env.step(action)
+            obs, _, dones, extras = env.step(action)
+            fell_now = dones.bool() & ~extras.get("time_outs", torch.zeros_like(dones)).bool()
             d = robot.data
             rows = {
                 "command": np.tile(seg.command, (num_envs, 1)),
@@ -164,19 +170,26 @@ def evaluate_schedule(
                 for key, value in rows.items():
                     getattr(traj, key).append(value[i])
                 if dones[i]:
-                    traj.fell = True
+                    traj.fell = bool(fell_now[i])
                     alive[i] = False
             if not alive.any():
                 break
-    env.close()
-    app.close()
     runs = [evaluate(t, manifest) for t in trajs]
     report = {
         "schedule": schedule.name,
         "seed0": runs[0],
+        "runs": runs,
         "summary": aggregate(runs),
         "source": manifest.source,
         "simulator": "isaac_lab",
     }
     write_report(out, **report)
+    s = report["summary"]
+    print(
+        f"isaac {schedule.name}: fall_rate={s['fall_rate']:.2f} vx_rmse={s['vx_rmse']:.3f} "
+        f"yaw_rmse={s['yaw_rate_rmse']:.3f} -> {out}",
+        flush=True,
+    )
+    env.close()
+    app.close()  # Kit may exit the process here; everything above is already on disk
     return report

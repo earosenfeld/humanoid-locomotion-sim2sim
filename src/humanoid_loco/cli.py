@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("--export-dir", type=Path, help="write policy.onnx + policy.json here")
 
     ev = sub.add_parser("eval-isaac", help="run a command schedule in Isaac Lab, same metrics")
-    ev.add_argument("--task", default="HLS-G1-Flat-Play-v0")
+    ev.add_argument("--task", default="HLS-G1-Flat-Eval-v0")
     ev.add_argument("--checkpoint", default="latest")
     ev.add_argument("--commands", type=Path, default=Path("configs/commands/walk.yaml"))
     ev.add_argument("--seeds", type=int, default=10, help="one Isaac env per seed")
