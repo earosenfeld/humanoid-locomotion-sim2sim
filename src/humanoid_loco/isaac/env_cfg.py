@@ -11,6 +11,9 @@
    reward keeps the gait upright.
 5. Actions reach the PD with a per-env transport delay of 0-2 policy steps (0-40 ms), resampled
    at reset, so the policy tolerates real inference-to-actuator latency.
+6. Velocity commands resample every 2-6 s instead of every 10 s. The delay-trained policy passed
+   every skill in isolation but fell on an abrupt 1.0 m/s forward -> 0.5 m/s lateral switch;
+   training on frequent switches is the fix.
 """
 
 from __future__ import annotations
@@ -61,6 +64,8 @@ def _to_12dof(cfg: G1FlatEnvCfg) -> None:
     cfg.rewards.joint_deviation_arms = None
     cfg.rewards.joint_deviation_fingers = None
     cfg.rewards.joint_deviation_torso = None
+
+    cfg.commands.base_velocity.resampling_time_range = (2.0, 6.0)
 
     cfg.terminations.base_height = DoneTerm(
         func=mdp.root_height_below_minimum, params={"minimum_height": 0.5}

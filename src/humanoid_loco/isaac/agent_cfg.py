@@ -11,4 +11,5 @@ class G1Flat12DofPPORunnerCfg(G1FlatPPORunnerCfg):
     def __post_init__(self) -> None:
         super().__post_init__()
         self.experiment_name = "g1_flat_12dof"
+        self.max_iterations = 2000
         self.obs_groups = {"policy": ["policy"], "critic": ["critic"]}
